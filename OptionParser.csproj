@@ -50,6 +50,7 @@
     <Compile Include="Option.cs" />
     <Compile Include="OptionParser.cs" />
     <Compile Include="OptionSwitches.cs" />
+    <Compile Include="Parser.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Tokenizer.cs" />
   </ItemGroup>
