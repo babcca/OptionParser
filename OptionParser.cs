@@ -406,28 +406,6 @@ namespace OptionParser
             
             return parsedOption;
         }
-
-
-
-        bool TokenExist(Option option, Token[] tokens, out int position)
-        {
-            
-            //int count = tokens.Where(tok => tok is OptionToken && option.Switches.Contains(tok.Value)).Count();
-            int pos = -1;
-            bool found = false;
-            foreach (Token token in tokens)
-            {
-                ++pos;
-                if ((token is OptionToken) && (option.Switches.Contains(token.Value)))
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            position = pos;
-            return found;
-        }
         #endregion
 
      
