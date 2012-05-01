@@ -90,6 +90,10 @@ namespace OptionParser
             return true;
         }
 
+        Option GetOptionByToken(Token token)
+        {
+            return Options.Where(opt => opt.Switches.Contains(token.Value)).FirstOrDefault();
+        }
         #endregion
 
         #region Public Methods
@@ -161,7 +165,6 @@ namespace OptionParser
             Token[] tokens = tokenizer.Tokenize(optionDictionary, arguments);
 
             CheckUnexpectedOption(tokens);
-            //CheckDuplictyOption(parsedOptions, tokens);
             List<Option> parsedOptions = GetParsedOptions(tokens);
             CheckRequiredOptions(parsedOptions);
             
@@ -179,7 +182,7 @@ namespace OptionParser
 
         #endregion
 
-        #region Check Unexpected Option
+        #region Tokens checker
         // pro kazdy token najdi registrovany option
         void CheckUnexpectedOption(Token[] tokens)
         {
@@ -208,21 +211,7 @@ namespace OptionParser
             }
         }
 
-        bool SwitchExist(Token token, out Option tokenOption) {
-            foreach (var option in Options)
-            {
-                if (option.Switches.Contains(token.Value))
-                {
-                    tokenOption = option;
-                    return true;
-                }
-            }
-            tokenOption = null;
-            return false;
-        }
-        #endregion
 
-        #region Check Required Options
         // prunik naparsovanych a povinnych musi byt roven povinnym
         // |N prunik P| == |P|
         void CheckRequiredOptions(List<Option> parsedOption)
@@ -233,6 +222,8 @@ namespace OptionParser
                 throw new RequiredOptionIsMissingException("any");
             }
         }
+
+
         #endregion
 
         #region Get Parsed Options
@@ -331,9 +322,19 @@ namespace OptionParser
                         }
                         else if (tokens[tokenNum] is TreatAsArgumentToken)
                         {
-                            parsedOption.Add(lastOption);
-                            ++tokenNum;
-                            state = 1;
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
+                            {
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
+                            }
+                            else
+                            {
+                                lastOption.AddArgumentValue("true");
+                                parsedOption.Add(lastOption);
+                                ++tokenNum;
+                                state = 1;
+                            }
+
                         }
                         break;
                     case 3:
@@ -383,6 +384,7 @@ namespace OptionParser
                                 state = 1;
                             }
                         }
+
                         else if (tokens[tokenNum] is TreatAsArgumentToken)
                         {
                             bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
@@ -393,9 +395,10 @@ namespace OptionParser
                             else
                             {
                                 parsedOption.Add(lastOption);
+                                ++tokenNum;
+                                state = 1;
                             }
-                            ++tokenNum;
-                            state = 1;
+
                         }
                         break;
                 }
@@ -404,10 +407,7 @@ namespace OptionParser
             return parsedOption;
         }
 
-        Option GetOptionByToken(Token token)
-        {
-            return Options.Where(opt => opt.Switches.Contains(token.Value)).FirstOrDefault();
-        }
+
 
         bool TokenExist(Option option, Token[] tokens, out int position)
         {
@@ -430,18 +430,7 @@ namespace OptionParser
         }
         #endregion
 
-        #region Duplicity Check
-        // Pocet naparsovany musi byt roven poctu optiontokenu
-        void CheckDuplictyOption(List<Option> parsedOptions, Token[] tokens)
-        {
-            int optionsCount = tokens.Where(tok => tok is OptionToken).Count();
-            if (optionsCount != parsedOptions.Count)
-            {
-                throw new DuplicitOptionSwitchException("Dva stejne optiony");
-            }
-        }
-        #endregion
-
+     
         #region @deprected
         public void Parse(string arguments, params char[] delimiters)
         {
