@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-
+using System.Text;
 using OptionParser.CommonTypes;
 
 namespace OptionParser
@@ -97,7 +97,7 @@ namespace OptionParser
         /// <summary>
         /// Enumeration which tells whether the option is optional or required.
         /// </summary>
-        public enum Mode
+        public enum ModeType
         {
             /// <summary>
             /// Option marked with this flag is optional.
@@ -114,7 +114,8 @@ namespace OptionParser
         #region Mambers
 
         List<string> arguments = new List<string>();
-        string[] switches;
+        SwitchesManager switches;
+        string description;
 
         #endregion
 
@@ -125,15 +126,12 @@ namespace OptionParser
         /// </summary>
         public string[] Switches
         {
-            private set
-            {
-                switches = value;
-            }
 
             get
             {
-                string[] result = new string[switches.Length];
-                switches.CopyTo(result, 0);
+                string[] result = new string[switches.Short.Count + switches.Long.Count];
+                switches.Short.Switches.CopyTo(result, 0);
+                switches.Long.Switches.CopyTo(result, switches.Short.Count);
                 return result;
             }
         }
@@ -165,6 +163,9 @@ namespace OptionParser
         /// </summary>
         public AbstractType ValueType { get; private set; }
 
+        public ModeType Mode { get; private set; }
+
+        public object DefaultValue { get; private set; }
         #endregion
 
         #region Constructors
@@ -173,44 +174,53 @@ namespace OptionParser
         /// Initializes a new instance of the <see cref="Option"/> class with no arguments and marked as optional.
         /// Default value for this option will be <c>false</c>.
         /// </summary>
-        /// <param name="switches">The switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The short (one char) switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The long switches identifying the option use space as a delimiter of the switches.</param>
         /// <param name="description">The description which will be typed in the help message.</param>
-        public Option(string switches, string description)
-            : this(switches, description, false, Mode.Optional, OptionArity.NoArgument, new BoolType())
+        public Option(string shortSwitches, string longSwitches, string description)
+            : this(shortSwitches, longSwitches, description, false, ModeType.Optional, OptionArity.NoArgument, new BoolType())
         { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Option"/> class according to specified details.
         /// Default value for this option will be <c>null</c>.
         /// </summary>
-        /// <param name="switches">The switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The short (one char) switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The long switches identifying the option use space as a delimiter of the switches.</param>
         /// <param name="description">The description which will be typed in the help message.</param>
         /// <param name="mode">The mode of the option specifies the optionality.</param>
         /// <param name="optionArity">The option arity.</param>
         /// <param name="valueType">Type of the value used for validating the argument and converting it to the desired type.</param>
-        public Option(string switches, string description, Mode mode, OptionArity optionArity, AbstractType valueType)
-            : this(switches, description, null, mode, optionArity, valueType)
+        public Option(string shortSwitches, string longSwitches, string description, ModeType mode, OptionArity optionArity, AbstractType valueType)
+            : this(shortSwitches, longSwitches, description, null, mode, optionArity, valueType)
         { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Option"/> class according to specified details.
         /// </summary>
-        /// <param name="switches">The switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The short (one char) switches identifying the option use space as a delimiter of the switches.</param>
+        /// <param name="shortSwitches">The long switches identifying the option use space as a delimiter of the switches.</param>
         /// <param name="description">The description which will be typed in the help message.</param>
         /// <param name="defaultValue">The default value of the option.</param>
         /// <param name="mode">The mode of the option specifies the optionality.</param>
         /// <param name="optionArity">The option arity.</param>
         /// <param name="valueType">Type of the value used for validating the argument and converting it to the desired type.</param>
-        public Option(string switches, string description, object defaultValue, Mode mode, OptionArity optionArity, AbstractType valueType)
+        public Option(string shortSwitches, string longSwitches, string description, object defaultValue, ModeType mode, OptionArity optionArity, AbstractType valueType)
         {
-            if (switches == null) throw new ArgumentNullException("switches");
+            // TODO kontrola null
+            if (shortSwitches == null) throw new ArgumentNullException("short switches");
+            if (longSwitches == null) throw new ArgumentNullException("long switches");
             if (description == null) throw new ArgumentNullException("description");
 
-            this.switches = switches.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            switches = new SwitchesManager(shortSwitches, longSwitches, optionArity, valueType);
+
+            this.description = description;
 
             //TODO vyhodit specifickou vyjimku, pokud je switches.Length == 0
             //TODO kontrolovat duplicitni switche
 
+            DefaultValue = defaultValue;
+            Mode = mode;
             Arity = optionArity;
             ValueType = valueType;
         }
@@ -226,7 +236,16 @@ namespace OptionParser
             arguments.Add(argument);
         }
 
-        #region IEnumerable<string> Members
+        #region Help Generator
+        public string ToHelp()
+        {
+            StringBuilder help = new StringBuilder();
+            help.AppendFormat("{0}\n\t{1}", switches.ToHelp(Arity, ValueType), description);
+            return help.ToString();
+        }
+        #endregion
+
+        #region Arguments IEnumerable<string> Members
 
         /// <summary>
         /// Gets the enumerator that iterates through a collection of the string representations of the arguments.
@@ -239,7 +258,7 @@ namespace OptionParser
 
         #endregion
 
-        #region IEnumerable 
+        #region Arguments IEnumerable 
         //for non-generic approach
 
         /// <summary>

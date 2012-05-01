@@ -168,19 +168,21 @@ namespace OptionParser
             // Switche vzdy NoArgument, Type.Optional
             // Ve skutecnost Maji jeden nepovinny argument typu bool s defaultni hodnotou false
             // Option("-v --verbose", "Ukecany vypis") ~ Option("-v --verbose", "Ukecany vypis", Option.Type.Optional, Option.NoArgument, new BoolType(false));
-            Option verbose = new Option("v p verbose ukecany povidej", "Ukecany vypis");
-            Option super = new Option("n nice", "Hezky vypis");
+            Option verbose = new Option("v p", "verbose ukecany povidej", "Ukecany vypis");
+            Option super = new Option("n", "nice", "Hezky vypis");
 
             // Optiony s argumenty, povinne nebo nepovinne
-            Option outputFile = new Option("o output", "Vystupni soubor", Option.Mode.Required, OptionArity.OneArgument, new StringType());
+            Option outputFile = new Option("o","output", "Vystupni soubor", Option.ModeType.Required, OptionArity.OneArgument, new StringType());
             // U optional nejak nastavit defaultni hodnotu
-            Option logFile = new Option("ol output-log", "Vystupni log", Option.Mode.Optional, OptionArity.OneArgument, new StringType());
+            Option logFile = new Option("o", "output-log", "Vystupni log", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
             // Nebo druha moznost
-            Option inputFile = new Option("i file", "Vstupni soubory", "defaultni hodnota", Option.Mode.Optional,
+            Option inputFile = new Option("i", "file", "Vstupni soubory", "defaultni hodnota", Option.ModeType.Optional,
                 OptionArity.ZeroOrMoreArguments, new StringType());
 
             parser.AddOptions(verbose, super, outputFile, logFile, inputFile);
-            
+            Console.WriteLine(verbose.ToHelp());
+            Console.WriteLine(inputFile.ToHelp());
+            Console.WriteLine(logFile.ToHelp());
             parser.Parse(args);
 
             //tady bych ty veci mozna cekal bez -- a -
