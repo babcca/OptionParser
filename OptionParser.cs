@@ -93,6 +93,22 @@ namespace OptionParser
         #endregion
 
         #region Public Methods
+        public void AddOptions(params Option[] options)
+        {
+            foreach (Option option in options)
+            {
+                if (SwitchesAreCorect(option.Switches))
+                {
+                    option.ValueType.Culture = culture;
+                    option.ValueType.IgnoreCase = ignoreCase;
+                    Options.Add(option);
+                }
+                else
+                {
+                    throw new NotImplementedException();
+                }
+            }
+        }
 
         // bude vracet hodnotu argumentu prvniho optionu
         public T GetValue<T>(string switchIdentifier)
@@ -125,12 +141,6 @@ namespace OptionParser
             return null;
         }
 
-        public bool IsSet(string switchIdentifier)
-        {
-            // predstava funkcnosti
-            Option option = Options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
-            return option.ArgumentsCount != 0;
-        }
 
         //vrati parametry... ty, co jsou na konci za tema optionama a jejich argumentama
         public string[] GetParameters()
@@ -154,41 +164,19 @@ namespace OptionParser
             List<Option> parsedOptions = GetParsedOptions(tokens);
             CheckRequiredOptions(parsedOptions);
             CheckDuplictyOption(parsedOptions, tokens);
-            CheckRequiredArguments(parsedOptions);
-            
-            // vyhodi vyjimku, pokud nebudou pritomny vsechny povinne optiony
-            //TODO: vyhodnotit tokeny a pripadit optionum nactene argumenty pomoci option.AddArgument
         }
 
-        
-
-
-        #region @deprected
-        public void Parse(string arguments, params char[] delimiters)
+        public void WriteHelp(TextWriter writer)
         {
-            //TODO vyhodit vhodnou vyjimku, kdyz je delimiters.Length == 0
-            string[] input = arguments.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
-            Parse(input);
-        }
-        #endregion
-
-        public void AddOptions(params Option[] options)
-        {
-            foreach (Option option in options)
+            writer.WriteLine("{0}", mainHelp);
+            foreach (Option option in Options)
             {
-                if (SwitchesAreCorect(option.Switches))
-                {
-                    option.ValueType.Culture = culture;
-                    option.ValueType.IgnoreCase = ignoreCase;
-                    Options.Add(option);
-                }
-                else
-                {
-                    throw new NotImplementedException();
-                }
+                writer.WriteLine("{0}", option.ToHelp());
             }
+
         }
 
+        #endregion
 
         #region Check Unexpected Option
         // pro kazdy token najdi registrovany option
@@ -214,6 +202,18 @@ namespace OptionParser
         }
         #endregion
 
+        #region Check Required Options
+        // prunik naparsovanych a povinnych musi byt roven povinnym
+        // |N prunik P| == |P|
+        void CheckRequiredOptions(List<Option> parsedOption)
+        {
+            int intersectionSize = requiredOptions.Where(opt => parsedOption.Contains(opt)).Count();
+            if (intersectionSize != requiredOptions.Length)
+            {
+                throw new RequiredOptionIsMissingException("any");
+            }
+        }
+        #endregion
 
         #region Get Parsed Options
         // pro kazdy token najdi prislusny option
@@ -289,6 +289,20 @@ namespace OptionParser
         }
         #endregion
 
+        #region @deprected
+        public void Parse(string arguments, params char[] delimiters)
+        {
+            //TODO vyhodit vhodnou vyjimku, kdyz je delimiters.Length == 0
+            string[] input = arguments.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
+            Parse(input);
+        }
+
+        public bool IsSet(string switchIdentifier)
+        {
+            // predstava funkcnosti
+            Option option = Options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
+            return option.ArgumentsCount != 0;
+        }
 
         void CheckRequiredArguments(List<Option> parsedOptions)
         {
@@ -299,29 +313,6 @@ namespace OptionParser
                 throw new RequiredOptionIsMissingException(corupted.Switches.First());
             }
         }
-
-        // prunik naparsovanych a povinnych musi byt roven povinnym
-        // |N prunik P| == |P|
-        void CheckRequiredOptions(List<Option> parsedOption)
-        {
-            int intersectionSize = requiredOptions.Where(opt => parsedOption.Contains(opt)).Count();
-            if (intersectionSize != requiredOptions.Length)
-            {
-                throw new RequiredOptionIsMissingException("any");
-            }
-        }
-
-        
-        public void WriteHelp(TextWriter writer)
-        {
-            writer.WriteLine("{0}", mainHelp);
-            foreach (Option option in Options)
-            {
-                writer.WriteLine("{0}", option.ToHelp());
-            }
-            
-        }
-
         #endregion
     }
 
