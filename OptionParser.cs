@@ -161,9 +161,10 @@ namespace OptionParser
             Token[] tokens = tokenizer.Tokenize(optionDictionary, arguments);
 
             CheckUnexpectedOption(tokens);
+            //CheckDuplictyOption(parsedOptions, tokens);
             List<Option> parsedOptions = GetParsedOptions(tokens);
             CheckRequiredOptions(parsedOptions);
-            CheckDuplictyOption(parsedOptions, tokens);
+            
         }
 
         public void WriteHelp(TextWriter writer)
@@ -182,22 +183,41 @@ namespace OptionParser
         // pro kazdy token najdi registrovany option
         void CheckUnexpectedOption(Token[] tokens)
         {
+            List<Option> usedOptions = new List<Option>();
+
             foreach (var token in tokens) {
-                bool isOption = (token is OptionToken);
-                if (isOption && !SwitchExist(token)) {
-                    throw new SwitchNotRegistredException(token.Value);
+                bool isOption = token is OptionToken;
+                if (isOption)
+                {
+                    Option tokenOption = GetOptionByToken(token);
+                    bool optionExist = tokenOption != null;
+                 
+                    if (!optionExist)
+                    {
+                        throw new SwitchNotRegistredException(token.Value);
+                    }
+                    else if (usedOptions.Contains(tokenOption))
+                    {
+                        throw new DuplicitOptionSwitchException(tokenOption.Switches.First());
+                    }
+                    else
+                    {
+                        usedOptions.Add(tokenOption);
+                    }
                 }
             }
         }
 
-        bool SwitchExist(Token token) {
+        bool SwitchExist(Token token, out Option tokenOption) {
             foreach (var option in Options)
             {
                 if (option.Switches.Contains(token.Value))
                 {
+                    tokenOption = option;
                     return true;
                 }
             }
+            tokenOption = null;
             return false;
         }
         #endregion
@@ -220,40 +240,173 @@ namespace OptionParser
         List<Option> GetParsedOptions(Token[] tokens)
         {
             List<Option> parsedOption = new List<Option>();
-            foreach (Option option in Options)
+            Option lastOption = null;
+            int tokenNum = 0;
+            int state = 0;
+
+            while (tokenNum != tokens.Length)
             {
-                int position = -1;
-                if (TokenExist(option, tokens, out position))
+                switch (state)
                 {
-                    // pokud je to bez parametru => je to switch
-                    if (option.Arity.MaximalOccurs == 0)
-                    {
-                        option.AddArgumentValue("true");
-                    }
-                    else
-                    {
-                        // Tady je problem
-                        // pri situaci kde option bere 0-inf argm potom 
-                        // neni mozne rozpoznat --argm=a b c d e f g h -- i j k l
-                        // protoze nevim co patrri argumentu a co programu
-                        // Chce to pridat zarazky neco jako DelimiterToken nebo neco takoveho
-                        while ((++position < tokens.Length) && (tokens[position] is ArgumentToken))
+                    case 0:
+                        if (tokens[tokenNum] is OptionToken)
                         {
-                            bool isValid = option.ValueType.Validate(tokens[position].Value);
-                            if (isValid)
+                            state = 2;
+                        }
+                        else if (tokens[tokenNum] is ArgumentToken)
+                        {
+                            state = 1;
+                        }
+                        else if (tokens[tokenNum] is TreatAsArgumentToken)
+                        {
+                            state = 1;
+                        }
+                        break;
+                    case 1:
+                        parameters.Add(tokens[tokenNum++].Value);
+                        if (tokenNum >= tokens.Length)
+                        {
+                            break;
+                        }
+                        if (tokens[tokenNum] is OptionToken)
+                        {
+                            state = 2;
+                        }
+                        else if (tokens[tokenNum] is ArgumentToken)
+                        {
+                            state = 1;
+                        }
+                        else if (tokens[tokenNum] is TreatAsArgumentToken)
+                        {
+                            ++tokenNum;
+                            state = 1;
+                        }
+                        break;
+                    case 2:
+                        lastOption = GetOptionByToken(tokens[tokenNum++]);
+                        if (tokenNum >= tokens.Length)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
                             {
-                                option.AddArgumentValue(tokens[position].Value);
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
                             }
                             else
                             {
-                                throw new ArgumentValidityException();
+                                lastOption.AddArgumentValue("true");
+                                parsedOption.Add(lastOption);
+                            }
+                            break;
+                        }
+                        if (tokens[tokenNum] is OptionToken)
+                        {
+
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
+                            {
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
+                            }
+                            else
+                            {
+                                lastOption.AddArgumentValue("true");
+                                parsedOption.Add(lastOption);
+                                state = 2;
+                            }
+                            
+                        }
+                        else if (tokens[tokenNum] is ArgumentToken)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            bool maximalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MaximalOccurs;
+                            if (!minimalSaturation || (minimalSaturation && !maximalSaturation))
+                            {
+                                state = 3;
+                            }
+                            else
+                            {
+                                lastOption.AddArgumentValue("true");
+                                parsedOption.Add(lastOption);
+                                state = 1;
                             }
                         }
-                    }
-                    parsedOption.Add(option);
+                        else if (tokens[tokenNum] is TreatAsArgumentToken)
+                        {
+                            parsedOption.Add(lastOption);
+                            ++tokenNum;
+                            state = 1;
+                        }
+                        break;
+                    case 3:
+                        if (!lastOption.ValueType.Validate(tokens[tokenNum].Value))
+                        {
+                            throw new ArgumentValidityException();
+                        }
+                        lastOption.AddArgumentValue(tokens[tokenNum++].Value);
+                        if (tokenNum >= tokens.Length)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
+                            {
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
+                            }
+                            else
+                            {
+                                parsedOption.Add(lastOption);
+                            }
+                            break;
+                        }
+                        if (tokens[tokenNum] is OptionToken)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
+                            {
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
+                            }
+                            else
+                            {
+                                parsedOption.Add(lastOption);
+                                state = 2;
+                            }
+                            
+                        }
+                        else if (tokens[tokenNum] is ArgumentToken)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            bool maximalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MaximalOccurs;
+                            if (!minimalSaturation || (minimalSaturation && !maximalSaturation))
+                            {
+                                state = 3;
+                            }
+                            else
+                            {
+                                parsedOption.Add(lastOption);
+                                state = 1;
+                            }
+                        }
+                        else if (tokens[tokenNum] is TreatAsArgumentToken)
+                        {
+                            bool minimalSaturation = lastOption.ArgumentsCount >= lastOption.Arity.MinimalOccurs;
+                            if (!minimalSaturation)
+                            {
+                                throw new RequiredArgumentIsMissingException(lastOption.Switches.First());
+                            }
+                            else
+                            {
+                                parsedOption.Add(lastOption);
+                            }
+                            ++tokenNum;
+                            state = 1;
+                        }
+                        break;
                 }
             }
+            
             return parsedOption;
+        }
+
+        Option GetOptionByToken(Token token)
+        {
+            return Options.Where(opt => opt.Switches.Contains(token.Value)).FirstOrDefault();
         }
 
         bool TokenExist(Option option, Token[] tokens, out int position)
@@ -335,16 +488,19 @@ namespace OptionParser
             Option super = new Option("n", "nice", "Hezky vypis");
 
             // Optiony s argumenty, povinne nebo nepovinne
-            Option outputFile = new Option("o","output", "Vystupni soubor", Option.ModeType.Required, OptionArity.OneArgument, new StringType());
+            Option outputFile = new Option("o","output", "Vystupni soubor", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
             // s option
-            Option sOption = new Option("s", "", "S option", Option.ModeType.Required, OptionArity.OneArgument, new StringType());
+            Option sOption = new Option("s", "", "S option", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
             // U optional nejak nastavit defaultni hodnotu
             Option logFile = new Option("l", "output-log", "Vystupni log", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
             // Nebo druha moznost
             Option inputFile = new Option("i", "file", "Vstupni soubory", "defaultni hodnota", Option.ModeType.Optional,
                 OptionArity.ZeroOrMoreArguments, new StringType());
 
-            parser.AddOptions(verbose, super, outputFile, logFile, inputFile, sOption);
+            Option range = new Option("r", "range", "Rozmezi", Option.ModeType.Optional, new OptionArity(2,3), new EnumStringType(new string[]{"a", "b", "c", "d", "e"}));
+
+
+            parser.AddOptions(verbose, super, logFile, inputFile, sOption, outputFile, range);
             parser.Parse(args);
 
             //tady bych ty veci mozna cekal bez -- a -

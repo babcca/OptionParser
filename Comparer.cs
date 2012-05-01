@@ -31,7 +31,7 @@ namespace OptionParser
         /// </summary>
         /// <param name="x">The x.</param>
         /// <param name="y">The y.</param>
-        /// <returns><c>true</c> if both swtings are equal; <c>false</c> otherwise.</returns>
+        /// <returns><c>true</c> if both strings are equal; <c>false</c> otherwise.</returns>
         public bool Equals(string x, string y)
         {
             return comparer.Compare(x, y) == 0;

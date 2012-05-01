@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Globalization;
 
+using OptionParser.Exceptions;
+
 namespace OptionParser.CommonTypes // teoreticky tady toho muze byt docela dost, tak jsem to vyclenil "vedle"
 {
     public abstract class AbstractType
@@ -19,6 +21,37 @@ namespace OptionParser.CommonTypes // teoreticky tady toho muze byt docela dost,
 
         public abstract object FromString(string value);
         public abstract bool Validate(string value);
+    }
+
+    public class IntType : AbstractType
+    {
+        int minValue;
+        int maxValue;
+
+        public IntType(int minValue = int.MinValue, int maxValue = int.MaxValue)
+        {
+            this.minValue = minValue;
+            this.maxValue = maxValue;
+        }
+        
+        public override object FromString(string value)
+        {
+            return int.Parse(value, Culture);
+        }
+
+        public override bool Validate(string value)
+        {
+            int dummy;
+            bool result = int.TryParse(value, NumberStyles.Any, Culture, out dummy);
+            if (result && dummy >= minValue && dummy <= maxValue)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
     }
 
     public class DoubleType : AbstractType
@@ -68,6 +101,8 @@ namespace OptionParser.CommonTypes // teoreticky tady toho muze byt docela dost,
 
         public EnumStringType(params string[] allowedStrings)
         {
+            if (allowedStrings == null) throw new ArgumentNullException("allowedStrings");
+
             this.allowedStrings = allowedStrings;
         }
 
@@ -75,8 +110,9 @@ namespace OptionParser.CommonTypes // teoreticky tady toho muze byt docela dost,
 
         public override object FromString(string value)
         {
-            //TODO porovnavat podle kultury
-            if (allowedStrings.Contains(value))
+            StringEqualityComparer stringEqualityComparer = new StringEqualityComparer(Culture, IgnoreCase);
+
+            if (allowedStrings.Contains(value, stringEqualityComparer))
             {
                 return value;
             }
@@ -89,7 +125,9 @@ namespace OptionParser.CommonTypes // teoreticky tady toho muze byt docela dost,
 
         public override bool Validate(string value)
         {
-            return allowedStrings.Contains(value);
+            StringEqualityComparer stringEqualityComparer = new StringEqualityComparer(Culture, IgnoreCase);
+
+            return allowedStrings.Contains(value, stringEqualityComparer);
         }
 
         #endregion

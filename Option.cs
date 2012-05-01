@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using OptionParser.CommonTypes;
 
@@ -157,10 +158,6 @@ namespace OptionParser
         /// </summary>
         public OptionArity Arity { get; private set; }
 
-        /// <summary>
-        /// Gets or sets the type of the value.
-        /// This will be used for checing correctness of the argument and for conversion to the specified type.
-        /// </summary>
         public AbstractType ValueType { get; private set; }
 
         public ModeType Mode { get; private set; }
@@ -221,10 +218,24 @@ namespace OptionParser
             DefaultValue = defaultValue;
             Mode = mode;
             Arity = optionArity;
-            ValueType = valueType;
+            this.ValueType = valueType;
         }
 
         #endregion
+
+        T GetValue<T>(string argument)
+        {
+            if (argument == null)
+            {
+                //TODO: zabalit do try pro pripad, ze by BFU hodil jako T nejakou blbost
+                return (T)DefaultValue;
+            }
+            else
+            {
+                //TODO: zabalit do try pro pripad, ze by BFU hodil jako T nejakou blbost
+                return (T)ValueType.FromString(argument); // tady pak bude misto option ten argument, co se precetl z prikazove radky
+            }
+        }
 
         /// <summary>
         /// Adds the string representation of the argument value.
@@ -235,7 +246,40 @@ namespace OptionParser
             arguments.Add(argument);
         }
 
+        #region Public Methods
+
+        public T GetValue<T>()
+        {
+            string argument = arguments.FirstOrDefault();
+            return GetValue<T>(argument);
+        }
+
+        public T[] GetValues<T>()
+        {
+            if (arguments.Count == 0)
+            {
+                return new T[] { GetValue<T>(null) };
+            }
+            else
+            {
+                List<T> values = new List<T>();
+                foreach (string argument in arguments)
+                {
+                    values.Add(GetValue<T>(argument));
+                }
+                return values.ToArray();
+            }
+        }
+
+        public bool ValidateArgument(string argument)
+        {
+            return ValueType.Validate(argument);
+        }
+
+        #endregion
+
         #region Help Generator
+        // tohle neni moc vodne pouziti regionu, je to vhodne spis na komentar
         public string ToHelp()
         {
             StringBuilder help = new StringBuilder();

@@ -35,13 +35,13 @@ namespace OptionParser
         /// Override this method to create new tokenizer.
         /// </summary>
         /// <param name="options">The options with their arities.</param>
-        /// <param name="input">The input to tokenize.</param>
+        /// <param name="inputs">The input to tokenize.</param>
         /// <returns>A collection of tokens representing options and arguments.</returns>
-        public abstract Token[] Tokenize(IDictionary<string, OptionArity> options, IEnumerable<string> input);
+        public abstract Token[] Tokenize(IDictionary<string, OptionArity> options, IEnumerable<string> inputs);
     }
 
     public class SmartTokenizer : Tokenizer
-        //TODO: prejmenovat!, dokumentace
+        //TODO: prejmenovat!
     {
         #region Consts
 
@@ -181,7 +181,7 @@ namespace OptionParser
         /// Tokenizes the specified options.
         /// </summary>
         /// <param name="options">The options with their arities.</param>
-        /// <param name="input">The input to tokenize.</param>
+        /// <param name="inputs">The input to tokenize.</param>
         /// <returns>A collection of tokens representing options and arguments.</returns>
         public override Token[] Tokenize(IDictionary<string, OptionArity> options, IEnumerable<string> inputs)
         {
@@ -196,9 +196,7 @@ namespace OptionParser
             inputs = PrepareInput(inputs);
 
             List<Token> tokens = new List<Token>();
-
             TreatMode treatMode = TreatMode.None;
-
             StringEqualityComparer stringEqualityComparer = new StringEqualityComparer(Culture, IgnoreCase);
 
             uint lastOptionArgumentCount = uint.MaxValue;
@@ -213,6 +211,7 @@ namespace OptionParser
                 else if (stringEqualityComparer.Equals(input, TreatAsArgumentMark))
                 {
                     treatMode = TreatMode.Argument;
+                    tokens.Add(new TreatAsArgumentToken());
                 }
                 else if (treatMode == TreatMode.OptionArgument)
                 {
@@ -394,5 +393,10 @@ namespace OptionParser
         {
             Value = value;
         }
+    }
+
+    public class TreatAsArgumentToken : Token
+    {
+
     }
 }
