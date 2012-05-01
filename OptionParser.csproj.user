@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
-    <StartArguments>-v --output="c:\users\Petr Babicka\output" -ol c:\log\main_log.txt -s ahoj --ahoj-jak-je</StartArguments>
+    <StartArguments>--output="c:\users\Petr Babicka\output2" -l c:\log\main_log.txt   -s ahoj -- argm1 argm2 argm3 --argm4 --ahoj-jak-je</StartArguments>
   </PropertyGroup>
 </Project>

@@ -6,6 +6,7 @@ using System.IO;
 using System.Globalization;
 
 using OptionParser.CommonTypes;
+using OptionParser.Exceptions;
 
 namespace OptionParser
 {
@@ -19,7 +20,8 @@ namespace OptionParser
         Tokenizer tokenizer;
         string mainHelp;
 
-        List<Option> options = new List<Option>();
+        List<Option> optionalOptions = new List<Option>();
+        List<Option> requiredOptions = new List<Option>();
         List<string> parameters = new List<string>();
 
         CultureInfo culture;
@@ -29,6 +31,18 @@ namespace OptionParser
 
         #endregion
 
+        // prohodit s optioanla arequered options
+        private Option[] Options
+        {
+            get
+            {
+                Option[] result = new Option[optionalOptions.Count + requiredOptions.Count];
+                requiredOptions.CopyTo(result, 0);
+                optionalOptions.CopyTo(result, requiredOptions.Count);
+                return result;
+            }
+        }
+        
         #region Constructors
 
         public OptionParser()
@@ -65,8 +79,10 @@ namespace OptionParser
         {
             foreach (string s in switches)
             {
-                int count = options.Where(opt => opt.Switches.Contains(s, stringEqualityComparer)).Count();
-                if (count > 0) return false;
+                
+                    int count = Options.Where(opt => opt.Switches.Contains(s, stringEqualityComparer)).Count();
+                    if (count > 0) return false;
+
             }
 
             return true;
@@ -76,20 +92,29 @@ namespace OptionParser
 
         #region Public Methods
 
-        // Vybec netusim jak tady vracet ty precasteny hodnoty
         // bude vracet hodnotu argumentu prvniho optionu
         public T GetValue<T>(string switchIdentifier)
         {
             // najit prepinac odpovidajic vstupu option
 
             // priklad nachazeni optionu (linearni cas)
-            Option option = options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
-
-            // test na ne-null
-
+            Option option = Options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
+            if (option == null)
+            {
+                throw new OptionNotFoundException(switchIdentifier);
+            }
+            
+            
             string argument = option.FirstOrDefault();
-            // test na ne-null
-            return (T)option.ValueType.FromString(argument); // tady pak bude misto option ten argument, co se precetl z prikazove radky
+            if (argument == null)
+            {
+                return (T)option.DefaultValue;
+            }
+            else
+            {
+                // test na ne-null
+                return (T)option.ValueType.FromString(argument); // tady pak bude misto option ten argument, co se precetl z prikazove radky
+            }
         }
 
         // bude vracet hodnoty vsech argumentu optionu, pretezovani se totiz neucastni navratovy typ
@@ -101,7 +126,7 @@ namespace OptionParser
         public bool IsSet(string switchIdentifier)
         {
             // predstava funkcnosti
-            Option option = options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
+            Option option = Options.Where(opt => opt.Switches.Contains(switchIdentifier, stringEqualityComparer)).FirstOrDefault();
             return option.ArgumentsCount != 0;
         }
 
@@ -114,7 +139,7 @@ namespace OptionParser
         public void Parse(string[] arguments)
         {
             Dictionary<string, OptionArity> optionDictionary = new Dictionary<string, OptionArity>();
-            foreach (Option option in options)
+            foreach (Option option in Options)
             {
                 foreach (string identifier in option.Switches)
                 {
@@ -122,16 +147,28 @@ namespace OptionParser
                 }
             }
             Token[] tokens = tokenizer.Tokenize(optionDictionary, arguments);
+
+            CheckUnexpectedOption(tokens);
+            List<Option> parsedOptions = GetParsedOptions(tokens);
+            CheckRequiredOptions(parsedOptions);
+            CheckDuplictyOption(parsedOptions, tokens);
+            CheckRequiredArguments(parsedOptions);
+            
             // vyhodi vyjimku, pokud nebudou pritomny vsechny povinne optiony
             //TODO: vyhodnotit tokeny a pripadit optionum nactene argumenty pomoci option.AddArgument
         }
 
+        
+
+
+        #region @deprected
         public void Parse(string arguments, params char[] delimiters)
         {
             //TODO vyhodit vhodnou vyjimku, kdyz je delimiters.Length == 0
             string[] input = arguments.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
             Parse(input);
         }
+        #endregion
 
         public void AddOptions(params Option[] options)
         {
@@ -141,15 +178,154 @@ namespace OptionParser
                 {
                     option.ValueType.Culture = culture;
                     option.ValueType.IgnoreCase = ignoreCase;
-                    this.options.Add(option);
+                    AddOption(option);
                 }
                 else
                 {
-                    //TODO vyhodit vhodnou vyjimku
+                    throw new NotImplementedException();
                 }
             }
         }
 
+        private void AddOption(Option option)
+        {
+            if (option.Mode == Option.ModeType.Optional)
+            {
+                optionalOptions.Add(option);
+            }
+            else if (option.Mode == Option.ModeType.Required)
+            {
+                requiredOptions.Add(option);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+
+        #region Check Unexpected Option
+        // pro kazdy token najdi registrovany option
+        void CheckUnexpectedOption(Token[] tokens)
+        {
+            foreach (var token in tokens) {
+                bool isOption = (token is OptionToken);
+                if (isOption && !SwitchExist(token)) {
+                    throw new SwitchNotRegistredException(token.Value);
+                }
+            }
+        }
+
+        bool SwitchExist(Token token) {
+            foreach (var option in Options)
+            {
+                if (option.Switches.Contains(token.Value))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        #endregion
+
+
+        #region Get Parsed Options
+        // pro kazdy token najdi prislusny option
+        List<Option> GetParsedOptions(Token[] tokens)
+        {
+            List<Option> parsedOption = new List<Option>();
+            foreach (Option option in Options)
+            {
+                int position = -1;
+                if (TokenExist(option, tokens, out position))
+                {
+                    // pokud je to bez parametru => je to switch
+                    if (option.Arity.MaximalOccurs == 0)
+                    {
+                        option.AddArgumentValue("true");
+                    }
+                    else
+                    {
+                        // Tady je problem
+                        // pri situaci kde option bere 0-inf argm potom 
+                        // neni mozne rozpoznat --argm=a b c d e f g h -- i j k l
+                        // protoze nevim co patrri argumentu a co programu
+                        // Chce to pridat zarazky neco jako DelimiterToken nebo neco takoveho
+                        while ((++position < tokens.Length) && (tokens[position] is ArgumentToken))
+                        {
+                            bool isValid = option.ValueType.Validate(tokens[position].Value);
+                            if (isValid)
+                            {
+                                option.AddArgumentValue(tokens[position].Value);
+                            }
+                            else
+                            {
+                                throw new ArgumentValidityException();
+                            }
+                        }
+                    }
+                    parsedOption.Add(option);
+                }
+            }
+            return parsedOption;
+        }
+
+        bool TokenExist(Option option, Token[] tokens, out int position)
+        {
+            
+            //int count = tokens.Where(tok => tok is OptionToken && option.Switches.Contains(tok.Value)).Count();
+            int pos = -1;
+            bool found = false;
+            foreach (Token token in tokens)
+            {
+                ++pos;
+                if ((token is OptionToken) && (option.Switches.Contains(token.Value)))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            position = pos;
+            return found;
+        }
+        #endregion
+
+        #region Duplicity Check
+        // Pocet naparsovany musi byt roven poctu optiontokenu
+        void CheckDuplictyOption(List<Option> parsedOptions, Token[] tokens)
+        {
+            int optionsCount = tokens.Where(tok => tok is OptionToken).Count();
+            if (optionsCount != parsedOptions.Count)
+            {
+                throw new DuplicitOptionSwitchException("Dva stejne optiony");
+            }
+        }
+        #endregion
+
+
+        void CheckRequiredArguments(List<Option> parsedOptions)
+        {
+            // pocita se s tim, ze parsovani uz proslo... u nej se vyhodi vyjimka, pokud se argumenty spatne naparsuji, takze tady uz jsou vsechny v poradku
+            Option corupted = parsedOptions.Where(opt => opt.ArgumentsCount < opt.Arity.MinimalOccurs).FirstOrDefault();
+            if (corupted != null)
+            {
+                throw new RequiredOptionIsMissingException(corupted.Switches.First());
+            }
+        }
+
+        // prunik naparsovanych a povinnych musi byt roven povinnym
+        // |N prunik P| == |P|
+        void CheckRequiredOptions(List<Option> parsedOption)
+        {
+            int intersectionSize = requiredOptions.Where(opt => parsedOption.Contains(opt)).Count();
+            if (intersectionSize != requiredOptions.Count)
+            {
+                throw new RequiredOptionIsMissingException("any");
+            }
+        }
+
+        
         public void WriteHelp(TextWriter writer)
         {
 
@@ -157,6 +333,37 @@ namespace OptionParser
 
         #endregion
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     //tohle pak zmizi a bude z toho DLL projekt
     class Program
@@ -168,18 +375,24 @@ namespace OptionParser
             // Switche vzdy NoArgument, Type.Optional
             // Ve skutecnost Maji jeden nepovinny argument typu bool s defaultni hodnotou false
             // Option("-v --verbose", "Ukecany vypis") ~ Option("-v --verbose", "Ukecany vypis", Option.Type.Optional, Option.NoArgument, new BoolType(false));
-            Option verbose = new Option("v p", "verbose ukecany povidej", "Ukecany vypis");
+            
+            // Zatim je povoleno mit -v a --v
+            // Option parser toto nedovoluje => kontrola uz pri vytvareni optionu
+            Option verbose = new Option("v", "verbose ukecany povidej", "Ukecany vypis");
+
             Option super = new Option("n", "nice", "Hezky vypis");
 
             // Optiony s argumenty, povinne nebo nepovinne
             Option outputFile = new Option("o","output", "Vystupni soubor", Option.ModeType.Required, OptionArity.OneArgument, new StringType());
+            // s option
+            Option sOption = new Option("s", "", "S option", Option.ModeType.Required, OptionArity.OneArgument, new StringType());
             // U optional nejak nastavit defaultni hodnotu
-            Option logFile = new Option("o", "output-log", "Vystupni log", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
+            Option logFile = new Option("l", "output-log", "Vystupni log", Option.ModeType.Optional, OptionArity.OneArgument, new StringType());
             // Nebo druha moznost
             Option inputFile = new Option("i", "file", "Vstupni soubory", "defaultni hodnota", Option.ModeType.Optional,
                 OptionArity.ZeroOrMoreArguments, new StringType());
 
-            parser.AddOptions(verbose, super, outputFile, logFile, inputFile);
+            parser.AddOptions(verbose, super, outputFile, logFile, inputFile, sOption);
             Console.WriteLine(verbose.ToHelp());
             Console.WriteLine(inputFile.ToHelp());
             Console.WriteLine(logFile.ToHelp());
@@ -187,10 +400,10 @@ namespace OptionParser
 
             //tady bych ty veci mozna cekal bez -- a -
             //to - a -- je zavisle na platforme, coz od knihovny asi nechece... navic stejne ocekavam, ze vevnitr v tom parseru nebo v cem si ty stringy budeme ukladat bez toho - a --
-            //Tester(true, parser.GetValue("--verbose", new BoolType()));
-            //Tester(true, parser.GetValue("-s", new BoolType()));
+            Tester(true, parser.GetValue<bool>("verbose"));
+            Tester("ahoj", parser.GetValue<string>("s"));
             Tester("c:\\users\\Petr Babicka\\output", parser.GetValue<string>("o"));
-            Tester("c:\\log\\main_log.txt", parser.GetValue<string>("ol"));
+            Tester("c:\\log\\main_log.txt", parser.GetValue<string>("l"));
             parser.WriteHelp(Console.Out);
         }
 

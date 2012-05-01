@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
+using OptionParser.Exceptions;
+
 
 using OptionParser.CommonTypes;
 
@@ -102,8 +104,16 @@ namespace OptionParser
 
         public SwitchesManager(string shortSwitchesString, string longSwitchesString, OptionArity optionArity, AbstractType valueType)
         {
-            Short = new ShortSwitches(shortSwitchesString);
-            Long = new LongSwitches(longSwitchesString);
+            bool intersectionIsEmpty = SwitchesIntersectionIsEmpty(shortSwitchesString, longSwitchesString);
+            if (intersectionIsEmpty)
+            {
+                Short = new ShortSwitches(shortSwitchesString);
+                Long = new LongSwitches(longSwitchesString);
+            }
+            else
+            {
+                throw new DuplicitOptionSwitchException("");
+            }
         }
         #region Help generator
         public string ToHelp(OptionArity arity, AbstractType valueType)
@@ -113,5 +123,14 @@ namespace OptionParser
             return help.ToString();
         }
         #endregion
+
+        private bool SwitchesIntersectionIsEmpty(string switchesA, string switchesB)
+        {
+            char[] delimiters = new char[] { ' ' };
+            string[] a = switchesA.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
+            string[] b = switchesB.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
+            int intersectionSize = a.Where(s => b.Contains(s)).Count();
+            return intersectionSize == 0;
+        }
     }
 }

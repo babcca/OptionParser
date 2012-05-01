@@ -217,7 +217,6 @@ namespace OptionParser
             this.description = description;
 
             //TODO vyhodit specifickou vyjimku, pokud je switches.Length == 0
-            //TODO kontrolovat duplicitni switche
 
             DefaultValue = defaultValue;
             Mode = mode;

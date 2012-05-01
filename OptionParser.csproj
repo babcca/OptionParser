@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="CommonTypes.cs" />
     <Compile Include="Comparer.cs" />
+    <Compile Include="Exceptions.cs" />
     <Compile Include="Option.cs" />
     <Compile Include="OptionParser.cs" />
     <Compile Include="OptionSwitches.cs" />
