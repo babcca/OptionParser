@@ -20,8 +20,7 @@ namespace OptionParser
         Tokenizer tokenizer;
         string mainHelp;
 
-        List<Option> optionalOptions = new List<Option>();
-        List<Option> requiredOptions = new List<Option>();
+        List<Option> Options = new List<Option>();
         List<string> parameters = new List<string>();
 
         CultureInfo culture;
@@ -29,19 +28,22 @@ namespace OptionParser
 
         StringEqualityComparer stringEqualityComparer;
 
-        #endregion
-
-        // prohodit s optioanla arequered options
-        private Option[] Options
+        Option[] optionalOptions
         {
             get
             {
-                Option[] result = new Option[optionalOptions.Count + requiredOptions.Count];
-                requiredOptions.CopyTo(result, 0);
-                optionalOptions.CopyTo(result, requiredOptions.Count);
-                return result;
+                return Options.Where(opt => opt.Mode == Option.ModeType.Optional).ToArray();
             }
         }
+
+        Option[] requiredOptions
+        {
+            get
+            {
+                return Options.Where(opt => opt.Mode == Option.ModeType.Required).ToArray();
+            }
+        }
+        #endregion
         
         #region Constructors
 
@@ -178,28 +180,12 @@ namespace OptionParser
                 {
                     option.ValueType.Culture = culture;
                     option.ValueType.IgnoreCase = ignoreCase;
-                    AddOption(option);
+                    Options.Add(option);
                 }
                 else
                 {
                     throw new NotImplementedException();
                 }
-            }
-        }
-
-        private void AddOption(Option option)
-        {
-            if (option.Mode == Option.ModeType.Optional)
-            {
-                optionalOptions.Add(option);
-            }
-            else if (option.Mode == Option.ModeType.Required)
-            {
-                requiredOptions.Add(option);
-            }
-            else
-            {
-                throw new NotImplementedException();
             }
         }
 
@@ -319,7 +305,7 @@ namespace OptionParser
         void CheckRequiredOptions(List<Option> parsedOption)
         {
             int intersectionSize = requiredOptions.Where(opt => parsedOption.Contains(opt)).Count();
-            if (intersectionSize != requiredOptions.Count)
+            if (intersectionSize != requiredOptions.Length)
             {
                 throw new RequiredOptionIsMissingException("any");
             }
@@ -328,41 +314,16 @@ namespace OptionParser
         
         public void WriteHelp(TextWriter writer)
         {
-
+            writer.WriteLine("{0}", mainHelp);
+            foreach (Option option in Options)
+            {
+                writer.WriteLine("{0}", option.ToHelp());
+            }
+            
         }
 
         #endregion
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     //tohle pak zmizi a bude z toho DLL projekt
@@ -393,9 +354,6 @@ namespace OptionParser
                 OptionArity.ZeroOrMoreArguments, new StringType());
 
             parser.AddOptions(verbose, super, outputFile, logFile, inputFile, sOption);
-            Console.WriteLine(verbose.ToHelp());
-            Console.WriteLine(inputFile.ToHelp());
-            Console.WriteLine(logFile.ToHelp());
             parser.Parse(args);
 
             //tady bych ty veci mozna cekal bez -- a -
